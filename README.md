@@ -1,64 +1,57 @@
 import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+import numpy as np
 
-def calculate_demographic_data(print_data=True):
-    # Read the dataset
-    df = pd.read_csv("adult.data.csv")
+# Import data
+df = pd.read_csv("medical_examination.csv")
 
-    # Question 1: How many people of each race are represented?
-    race_count = df["race"].value_counts()
+# Add overweight column (BMI > 25 is overweight)
+df["BMI"] = df["weight"] / ((df["height"] / 100) ** 2)
+df["overweight"] = (df["BMI"] > 25).astype(int)
+df.drop(columns=["BMI"], inplace=True)  # Remove temporary BMI column
 
-    # Question 2: What is the average age of men?
-    average_age_men = round(df[df["sex"] == "Male"]["age"].mean(), 1)
+# Normalize cholesterol and glucose (1 -> 0, else -> 1)
+df["cholesterol"] = (df["cholesterol"] > 1).astype(int)
+df["gluc"] = (df["gluc"] > 1).astype(int)
 
-    # Question 3: What is the percentage of people who have a Bachelor's degree?
-    percentage_bachelors = round((df["education"] == "Bachelors").mean() * 100, 1)
+# Draw Categorical Plot
+def draw_cat_plot():
+    # Melt data for categorical plot
+    df_cat = pd.melt(df, id_vars=["cardio"], value_vars=["cholesterol", "gluc", "smoke", "alco", "active", "overweight"])
 
-    # Question 4: Advanced education (Bachelors, Masters, Doctorate) and earning >50K
-    advanced_education = df["education"].isin(["Bachelors", "Masters", "Doctorate"])
-    higher_education_rich = round((df[advanced_education]["salary"] == ">50K").mean() * 100, 1)
+    # Group and count values
+    df_cat = df_cat.groupby(["cardio", "variable", "value"]).size().reset_index(name="total")
 
-    # Question 5: Percentage of people without advanced education making >50K
-    lower_education_rich = round((df[~advanced_education]["salary"] == ">50K").mean() * 100, 1)
+    # Create catplot
+    fig = sns.catplot(
+        x="variable", y="total", hue="value", col="cardio",
+        data=df_cat, kind="bar", height=5
+    ).fig
 
-    # Question 6: What is the minimum number of hours a person works per week?
-    min_work_hours = df["hours-per-week"].min()
+    return fig
 
-    # Question 7: What percentage of the people who work the minimum number of hours per week have >50K salary?
-    min_workers = df[df["hours-per-week"] == min_work_hours]
-    rich_percentage = round((min_workers["salary"] == ">50K").mean() * 100, 1)
+# Draw Heat Map
+def draw_heat_map():
+    # Clean data based on specified conditions
+    df_heat = df[
+        (df["ap_lo"] <= df["ap_hi"]) &
+        (df["height"] >= df["height"].quantile(0.025)) &
+        (df["height"] <= df["height"].quantile(0.975)) &
+        (df["weight"] >= df["weight"].quantile(0.025)) &
+        (df["weight"] <= df["weight"].quantile(0.975))
+    ]
 
-    # Question 8: Country with highest percentage of people earning >50K
-    country_salary_group = df[df["salary"] == ">50K"]["native-country"].value_counts()
-    country_total_group = df["native-country"].value_counts()
-    country_percentage = (country_salary_group / country_total_group * 100).dropna()
-    highest_earning_country = country_percentage.idxmax()
-    highest_earning_country_percentage = round(country_percentage.max(), 1)
+    # Compute correlation matrix
+    corr = df_heat.corr()
 
-    # Question 9: Most popular occupation for those earning >50K in India
-    india_high_income = df[(df["salary"] == ">50K") & (df["native-country"] == "India")]
-    top_IN_occupation = india_high_income["occupation"].value_counts().idxmax()
+    # Generate a mask for the upper triangle
+    mask = np.triu(np.ones_like(corr, dtype=bool))
 
-    # Print results if needed
-    if print_data:
-        print("Race count:\n", race_count)
-        print("Average age of men:", average_age_men)
-        print("Percentage with Bachelors:", percentage_bachelors)
-        print("Higher education earning >50K:", higher_education_rich)
-        print("Lower education earning >50K:", lower_education_rich)
-        print("Min work hours:", min_work_hours)
-        print("Percentage of min workers earning >50K:", rich_percentage)
-        print("Country with highest >50K percentage:", highest_earning_country, highest_earning_country_percentage)
-        print("Top occupation in India for >50K earners:", top_IN_occupation)
+    # Set up the matplotlib figure
+    fig, ax = plt.subplots(figsize=(10, 8))
 
-    return {
-        "race_count": race_count,
-        "average_age_men": average_age_men,
-        "percentage_bachelors": percentage_bachelors,
-        "higher_education_rich": higher_education_rich,
-        "lower_education_rich": lower_education_rich,
-        "min_work_hours": min_work_hours,
-        "rich_percentage": rich_percentage,
-        "highest_earning_country": highest_earning_country,
-        "highest_earning_country_percentage": highest_earning_country_percentage,
-        "top_IN_occupation": top_IN_occupation,
-    }
+    # Draw the heatmap
+    sns.heatmap(corr, annot=True, fmt=".1f", mask=mask, cmap="coolwarm", linewidths=0.5, ax=ax)
+
+    return fig
