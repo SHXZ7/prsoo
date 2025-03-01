@@ -1,57 +1,32 @@
 import pandas as pd
-import seaborn as sns
 import matplotlib.pyplot as plt
-import numpy as np
+from scipy.stats import linregress
 
 # Import data
-df = pd.read_csv("medical_examination.csv")
+df = pd.read_csv("epa-sea-level.csv")
 
-# Add overweight column (BMI > 25 is overweight)
-df["BMI"] = df["weight"] / ((df["height"] / 100) ** 2)
-df["overweight"] = (df["BMI"] > 25).astype(int)
-df.drop(columns=["BMI"], inplace=True)  # Remove temporary BMI column
+# Define function to draw scatter plot and best-fit lines
+def draw_plot():
+    # Create scatter plot
+    plt.figure(figsize=(10, 6))
+    plt.scatter(df["Year"], df["CSIRO Adjusted Sea Level"], label="Data", alpha=0.6)
 
-# Normalize cholesterol and glucose (1 -> 0, else -> 1)
-df["cholesterol"] = (df["cholesterol"] > 1).astype(int)
-df["gluc"] = (df["gluc"] > 1).astype(int)
+    # Line of best fit for all data (1880-2050)
+    slope1, intercept1, _, _, _ = linregress(df["Year"], df["CSIRO Adjusted Sea Level"])
+    years1 = range(1880, 2051)
+    plt.plot(years1, intercept1 + slope1 * years1, "r", label="Best Fit (1880-2050)")
 
-# Draw Categorical Plot
-def draw_cat_plot():
-    # Melt data for categorical plot
-    df_cat = pd.melt(df, id_vars=["cardio"], value_vars=["cholesterol", "gluc", "smoke", "alco", "active", "overweight"])
+    # Line of best fit for data from year 2000-2050
+    df_recent = df[df["Year"] >= 2000]
+    slope2, intercept2, _, _, _ = linregress(df_recent["Year"], df_recent["CSIRO Adjusted Sea Level"])
+    years2 = range(2000, 2051)
+    plt.plot(years2, intercept2 + slope2 * years2, "g", label="Best Fit (2000-2050)")
 
-    # Group and count values
-    df_cat = df_cat.groupby(["cardio", "variable", "value"]).size().reset_index(name="total")
+    # Formatting
+    plt.xlabel("Year")
+    plt.ylabel("Sea Level (inches)")
+    plt.title("Rise in Sea Level")
+    plt.legend()
+    plt.grid(True)
 
-    # Create catplot
-    fig = sns.catplot(
-        x="variable", y="total", hue="value", col="cardio",
-        data=df_cat, kind="bar", height=5
-    ).fig
-
-    return fig
-
-# Draw Heat Map
-def draw_heat_map():
-    # Clean data based on specified conditions
-    df_heat = df[
-        (df["ap_lo"] <= df["ap_hi"]) &
-        (df["height"] >= df["height"].quantile(0.025)) &
-        (df["height"] <= df["height"].quantile(0.975)) &
-        (df["weight"] >= df["weight"].quantile(0.025)) &
-        (df["weight"] <= df["weight"].quantile(0.975))
-    ]
-
-    # Compute correlation matrix
-    corr = df_heat.corr()
-
-    # Generate a mask for the upper triangle
-    mask = np.triu(np.ones_like(corr, dtype=bool))
-
-    # Set up the matplotlib figure
-    fig, ax = plt.subplots(figsize=(10, 8))
-
-    # Draw the heatmap
-    sns.heatmap(corr, annot=True, fmt=".1f", mask=mask, cmap="coolwarm", linewidths=0.5, ax=ax)
-
-    return fig
+    return plt.gca()
